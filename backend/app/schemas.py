@@ -21,8 +21,9 @@ class AsciiSettings(BaseModel):
     mode: Literal["monochrome", "original_colors"] = "monochrome"
     normalize_contrast: bool = True
     temporal_smoothing: float = Field(0.2, ge=0.0, le=0.85)
-    output_width: int | None = Field(None, ge=160, le=3840, multiple_of=2)
-    output_height: int | None = Field(None, ge=90, le=3840, multiple_of=2)
+    output_width: int | None = Field(None, ge=1)
+    output_height: int | None = Field(None, ge=1)
+    target_size_mb: float | None = Field(None, gt=0)
 
     @model_validator(mode="after")
     def validate_output_resolution(self) -> "AsciiSettings":
@@ -58,10 +59,11 @@ class ImageAsciiSettings(BaseModel):
     character_set: Literal["console", "classic", "detailed", "minimal", "braille"] = "console"
     mode: Literal["monochrome", "original_colors"] = "monochrome"
     normalize_contrast: bool = True
-    output_width: int | None = Field(None, ge=64, le=4096)
-    output_height: int | None = Field(None, ge=64, le=4096)
+    output_width: int | None = Field(None, ge=1)
+    output_height: int | None = Field(None, ge=1)
     output_format: Literal["png", "jpeg", "webp"] = "png"
     quality: Literal["draft", "balanced", "high"] = "balanced"
+    target_size_mb: float | None = Field(None, gt=0)
 
     @model_validator(mode="after")
     def validate_output_resolution(self) -> "ImageAsciiSettings":

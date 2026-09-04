@@ -75,9 +75,12 @@ def _h264_encoder(binary: str) -> str:
     )
 
 
-def _video_encoder_args(quality: str) -> list[str]:
+def _video_encoder_args(quality: str, bitrate_kbps: int | None = None) -> list[str]:
     crf, preset = QUALITY[quality]
     encoder = _h264_encoder(settings.ffmpeg_binary)
+    if bitrate_kbps is not None:
+        bitrate = f"{bitrate_kbps}k"
+        return ["-c:v", encoder, "-b:v", bitrate, "-maxrate", bitrate, "-bufsize", f"{bitrate_kbps * 2}k"]
     if encoder == "libx264":
         return ["-c:v", encoder, "-preset", preset, "-crf", str(crf)]
     bitrate = {"draft": "1500k", "balanced": "3500k", "high": "7000k"}[quality]
@@ -176,7 +179,12 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
 
 
 def _output_dimensions(render_width: int, render_height: int, options: AsciiSettings) -> tuple[int, int]:
-    return options.output_width or render_width, options.output_height or render_height
+    width = options.output_width or render_width
+    height = options.output_height or render_height
+    if options.output_format == "mp4":
+        width += width % 2
+        height += height % 2
+    return width, height
 
 
 def _fit_output_frame(frame_bgr: np.ndarray, width: int, height: int, background_color: str) -> np.ndarray:
@@ -505,7 +513,12 @@ def convert_video(
             ]
         )
     else:
-        encoding_command.extend(_video_encoder_args(options.quality))
+        target_video_bitrate = None
+        if options.target_size_mb:
+            audio_kbps = {"draft": 96, "balanced": 128, "high": 192}[options.quality] if options.keep_audio and info.has_audio else 0
+            total_kbps = options.target_size_mb * 8192 * 0.92 / max(info.duration, 0.1)
+            target_video_bitrate = max(16, round(total_kbps - audio_kbps))
+        encoding_command.extend(_video_encoder_args(options.quality, target_video_bitrate))
         encoding_command.extend(
             [
                 "-pix_fmt",

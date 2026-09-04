@@ -98,6 +98,7 @@ def test_image_to_png_and_text(tmp_path: Path) -> None:
                 "output_height": 240,
                 "output_format": "jpeg",
                 "quality": "draft",
+                "target_size_mb": 0.02,
             },
         )
         assert compressed.status_code == 200, compressed.text
@@ -106,6 +107,7 @@ def test_image_to_png_and_text(tmp_path: Path) -> None:
         assert compressed_job["result_width"] == 320
         assert compressed_job["result_height"] == 240
         assert compressed_job["result_size_bytes"] > 0
+        assert compressed_job["result_size_bytes"] <= 0.02 * 1024 * 1024
         compressed_image = client.get(compressed_job["result_image_url"])
         assert compressed_image.headers["content-type"].startswith("image/jpeg")
         compressed_output = tmp_path / "compressed.jpg"

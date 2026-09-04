@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 import cv2
@@ -53,6 +54,7 @@ def convert_image(
                 "output_height",
                 "output_format",
                 "quality",
+                "target_size_mb",
             }
         ),
         temporal_smoothing=0.0,
@@ -74,24 +76,42 @@ def convert_image(
     output = Image.fromarray(cv2.cvtColor(rendered, cv2.COLOR_BGR2RGB))
     quality = IMAGE_QUALITY[options.quality]
     try:
-        if options.output_format == "png":
+        target_bytes = round(options.target_size_mb * 1024 * 1024) if options.target_size_mb else None
+        if target_bytes and options.output_format in {"jpeg", "webp"}:
+            best: bytes | None = None
+            low, high = 1, 100
+            while low <= high:
+                candidate_quality = (low + high) // 2
+                buffer = BytesIO()
+                save_options = {"format": options.output_format.upper(), "quality": candidate_quality, "optimize": True}
+                if options.output_format == "jpeg":
+                    save_options.update(progressive=True, subsampling=2)
+                else:
+                    save_options.update(method=6)
+                output.save(buffer, **save_options)
+                payload = buffer.getvalue()
+                if len(payload) <= target_bytes:
+                    best = payload
+                    low = candidate_quality + 1
+                else:
+                    high = candidate_quality - 1
+            if best is None:
+                raise RuntimeError("Заданный размер слишком мал для выбранного разрешения. Уменьшите разрешение или увеличьте лимит.")
+            image_output_path.write_bytes(best)
+        elif options.output_format == "png":
             output.save(image_output_path, format="PNG", compress_level=quality["png"], optimize=True)
+            if target_bytes and image_output_path.stat().st_size > target_bytes:
+                for colors in (256, 128, 64, 32, 16, 8, 4, 2):
+                    quantized = output.quantize(colors=colors, method=Image.Quantize.FASTOCTREE)
+                    quantized.save(image_output_path, format="PNG", compress_level=9, optimize=True)
+                    if image_output_path.stat().st_size <= target_bytes:
+                        break
+                if image_output_path.stat().st_size > target_bytes:
+                    raise RuntimeError("PNG без потерь не помещается в заданный размер. Выберите WebP или JPEG.")
         elif options.output_format == "jpeg":
-            output.save(
-                image_output_path,
-                format="JPEG",
-                quality=quality["jpeg"],
-                optimize=True,
-                progressive=True,
-                subsampling=0 if options.quality == "high" else 2,
-            )
+            output.save(image_output_path, format="JPEG", quality=quality["jpeg"], optimize=True, progressive=True, subsampling=0 if options.quality == "high" else 2)
         else:
-            output.save(
-                image_output_path,
-                format="WEBP",
-                quality=quality["webp"],
-                method=6,
-            )
+            output.save(image_output_path, format="WEBP", quality=quality["webp"], method=6)
     except OSError as exc:
         raise RuntimeError("Не удалось сохранить сжатое ASCII-изображение.") from exc
     text_output_path.write_text(text_result + "\n", encoding="utf-8")

@@ -69,8 +69,8 @@
       palette: elements.palette.value,
       invert: elements.invert.checked,
       outputResolution: elements.outputResolution.value,
-      outputWidth: clamp(Number(elements.outputWidth.value) || 1280, 64, 4096),
-      outputHeight: clamp(Number(elements.outputHeight.value) || 720, 64, 4096),
+      outputWidth: Math.max(1, Math.round(Number(elements.outputWidth.value) || 1280)),
+      outputHeight: Math.max(1, Math.round(Number(elements.outputHeight.value) || 720)),
       outputFormat: elements.outputFormat.value,
       compressionQuality: Number(elements.compressionQuality.value),
     };

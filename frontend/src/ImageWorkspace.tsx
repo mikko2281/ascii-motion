@@ -47,6 +47,7 @@ interface ImageOptions {
   output_height: number | null
   output_format: 'png' | 'jpeg' | 'webp'
   quality: 'draft' | 'balanced' | 'high'
+  target_size_mb: number | null
 }
 
 const defaults: ImageOptions = {
@@ -65,6 +66,7 @@ const defaults: ImageOptions = {
   output_height: null,
   output_format: 'png',
   quality: 'balanced',
+  target_size_mb: null,
 }
 
 const outputResolutionPresets = ['640x360', '1280x720', '1920x1080', '1080x1080', '1080x1350'] as const
@@ -140,6 +142,7 @@ export default function ImageWorkspace() {
   const [importingUrl, setImportingUrl] = useState(false)
   const [job, setJob] = useState<ImageJob | null>(null)
   const [options, setOptions] = useState<ImageOptions>(defaults)
+  const [customResolution, setCustomResolution] = useState(false)
   const [textResult, setTextResult] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -393,7 +396,11 @@ export default function ImageWorkspace() {
   const mediaAspect = job ? { '--media-aspect': `${job.result_width || job.image.width} / ${job.result_height || job.image.height}` } as CSSProperties : undefined
   const renderedCharacterCount = textResult.replace(/\r?\n/g, '').length
   const configuredResolution = options.output_width && options.output_height ? `${options.output_width}x${options.output_height}` : 'auto'
-  const resolutionValue = configuredResolution === 'auto' || outputResolutionPresets.includes(configuredResolution as typeof outputResolutionPresets[number]) ? configuredResolution : 'custom'
+  const resolutionValue = customResolution
+    ? 'custom'
+    : configuredResolution === 'auto' || outputResolutionPresets.includes(configuredResolution as typeof outputResolutionPresets[number])
+      ? configuredResolution
+      : 'custom'
 
   return (
     <div className="workspace image-workspace">
@@ -489,7 +496,7 @@ export default function ImageWorkspace() {
       </section>
 
       <aside className="settings-panel" aria-label="Настройки ASCII-изображения">
-        <div className="panel-title"><SlidersHorizontal size={18} /><h2>Настройки изображения</h2><button type="button" onClick={() => { setOptions(defaults); setStylePreset('classic'); setExactCountEnabled(false); setCharacterCountInput('1000'); setDirty(Boolean(job?.result_image_url)) }} title="Сбросить"><RefreshCw size={15} /></button></div>
+        <div className="panel-title"><SlidersHorizontal size={18} /><h2>Настройки изображения</h2><button type="button" onClick={() => { setOptions(defaults); setCustomResolution(false); setStylePreset('classic'); setExactCountEnabled(false); setCharacterCountInput('1000'); setDirty(Boolean(job?.result_image_url)) }} title="Сбросить"><RefreshCw size={15} /></button></div>
 
         <div className="style-section-title">Стиль ASCII</div>
         <div className="style-presets" role="group" aria-label="Стиль ASCII-изображения">
@@ -536,6 +543,7 @@ export default function ImageWorkspace() {
         <div className="select-grid image-select-grid">
           <label className="wide-select"><span>Разрешение изображения</span><select value={resolutionValue} onChange={(event) => {
             const value = event.target.value
+            setCustomResolution(value === 'custom')
             if (value === 'auto') setOptions((current) => ({ ...current, output_width: null, output_height: null }))
             else if (value === 'custom') setOptions((current) => ({ ...current, output_width: current.output_width || 1280, output_height: current.output_height || 720 }))
             else {
@@ -543,9 +551,10 @@ export default function ImageWorkspace() {
               setOptions((current) => ({ ...current, output_width: width, output_height: height }))
             }
           }}><option value="auto">Авто · по размеру ASCII-сетки</option><option value="640x360">640×360 · компактное</option><option value="1280x720">1280×720 · HD</option><option value="1920x1080">1920×1080 · Full HD</option><option value="1080x1080">1080×1080 · квадрат</option><option value="1080x1350">1080×1350 · вертикальное</option><option value="custom">Своё разрешение</option></select></label>
-          {resolutionValue === 'custom' && <div className="resolution-inputs wide-select"><label><span>Ширина</span><input type="number" min="64" max="4096" value={options.output_width || 1280} onChange={(event) => patchOption('output_width', Math.max(64, Math.min(4096, Number(event.target.value))))} /></label><b>×</b><label><span>Высота</span><input type="number" min="64" max="4096" value={options.output_height || 720} onChange={(event) => patchOption('output_height', Math.max(64, Math.min(4096, Number(event.target.value))))} /></label></div>}
+          <div className="resolution-inputs wide-select"><label><span>Своя ширина</span><input key={`image-width-${options.output_width || 1280}`} type="number" min="1" defaultValue={options.output_width || 1280} onFocus={() => { setCustomResolution(true); setOptions((current) => ({ ...current, output_width: current.output_width || 1280, output_height: current.output_height || 720 })) }} onBlur={(event) => patchOption('output_width', Math.max(1, Math.round(Number(event.target.value) || 1280)))} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label><b>×</b><label><span>Своя высота</span><input key={`image-height-${options.output_height || 720}`} type="number" min="1" defaultValue={options.output_height || 720} onFocus={() => { setCustomResolution(true); setOptions((current) => ({ ...current, output_width: current.output_width || 1280, output_height: current.output_height || 720 })) }} onBlur={(event) => patchOption('output_height', Math.max(1, Math.round(Number(event.target.value) || 720)))} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label></div>
           <label><span>Формат файла</span><select value={options.output_format} onChange={(event) => patchOption('output_format', event.target.value as ImageOptions['output_format'])}><option value="webp">WebP · самый компактный</option><option value="jpeg">JPEG · совместимый</option><option value="png">PNG · без потерь</option></select></label>
           <label><span>Сжатие файла</span><select value={options.quality} onChange={(event) => patchOption('quality', event.target.value as ImageOptions['quality'])}><option value="draft">Сильное · меньше файл</option><option value="balanced">Сбалансированное</option><option value="high">Мягкое · лучше качество</option></select></label>
+          <label className="wide-select"><span>Максимальный размер файла, МБ</span><input className="number-setting" type="number" min="0.1" step="0.1" placeholder="Без ограничения" value={options.target_size_mb ?? ''} onChange={(event) => patchOption('target_size_mb', event.target.value ? Math.max(0.1, Number(event.target.value)) : null)} /></label>
           <label className="wide-select"><span>Набор символов</span><select value={options.character_set} onChange={(event) => patchOption('character_set', event.target.value as ImageOptions['character_set'])}><option value="console">Console dense</option><option value="classic">Classic</option><option value="detailed">Detailed</option><option value="minimal">Minimal</option><option value="braille">Unicode / Braille 2×4</option></select></label>
         </div>
 

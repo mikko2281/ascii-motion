@@ -187,6 +187,8 @@ select:disabled { color: #606867; background: #0c0e0f; cursor: not-allowed; }
 .resolution-inputs b { padding-bottom: 12px; color: var(--acid); font: 700 .75rem/1 ui-monospace, "Cascadia Code", monospace; }
 .resolution-inputs input { width: 100%; height: 40px; padding: 0 10px; color: var(--ink); background: #090b0c; border: 1px solid var(--line); font: 700 .78rem/1 ui-monospace, "Cascadia Code", monospace; }
 .resolution-inputs input:focus-visible { outline: 1px solid var(--acid); outline-offset: 1px; }
+.number-setting { width: 100%; height: 40px; padding: 0 10px; color: var(--ink); background: #090b0c; border: 1px solid var(--line); font: 700 .78rem/1 ui-monospace, "Cascadia Code", monospace; }
+.number-setting:focus-visible { outline: 1px solid var(--acid); outline-offset: 1px; }
 
 .color-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
 .color-row label { display: grid; grid-template-columns: 1fr auto; align-items: center; min-height: 45px; padding: 0 10px; background: #090b0c; border: 1px solid var(--line); }
