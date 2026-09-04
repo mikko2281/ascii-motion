@@ -158,6 +158,7 @@ def _braille_font_path() -> str:
     candidates = [
         settings.font_path,
         "C:/Windows/Fonts/seguisym.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     ]
@@ -166,7 +167,7 @@ def _braille_font_path() -> str:
             return candidate
     raise RuntimeError(
         "Не найден шрифт с символами Unicode Braille. На Windows используется Segoe UI Symbol, "
-        "а в Docker/Linux — DejaVu Sans Mono."
+        "а в Docker/Linux — DejaVu Sans."
     )
 
 

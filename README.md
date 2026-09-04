@@ -187,7 +187,7 @@ docker compose down -v
 
 Геометрия сетки учитывает реальную ширину и высоту глифа выбранного моноширинного шрифта, поэтому пропорции исходного изображения сохраняются.
 
-TXT из режима Unicode/Braille сохраняется в UTF-8 и содержит сами Braille-символы. Для корректного просмотра текста нужен шрифт с поддержкой Unicode Braille (в приложении на Windows используется Segoe UI Symbol, в Docker/Linux — DejaVu Sans Mono).
+TXT из режима Unicode/Braille сохраняется в UTF-8 и содержит сами Braille-символы. Для корректного просмотра текста нужен шрифт с поддержкой Unicode Braille (в приложении на Windows используется Segoe UI Symbol, в Docker/Linux — DejaVu Sans).
 
 ## Конфигурация и ограничения
 
@@ -286,4 +286,3 @@ pytest -q
 ```
 
 Для запуска теста `ffmpeg` и `ffprobe` должны быть в `PATH`.
-
