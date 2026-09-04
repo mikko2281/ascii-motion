@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Браузерная демо-версия ASCII Motion: преобразование изображений в ASCII и Unicode Braille с экспортом PNG и TXT."
+    />
+    <title>ASCII Motion — браузерное демо</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="ASCII Motion — главная">
+        <span class="brand-mark" aria-hidden="true">AM</span>
+        <span>
+          <strong>ASCII MOTION</strong>
+          <small>GITHUB PAGES DEMO</small>
+        </span>
+      </a>
+      <a class="repo-link" href="https://github.com/mikko2281/ascii-motion" target="_blank" rel="noreferrer">
+        Полная версия <span aria-hidden="true">↗</span>
+      </a>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow"><span>●</span> РАБОТАЕТ ПРЯМО В БРАУЗЕРЕ</p>
+          <h1 id="page-title">Превратите изображение<br />в символы</h1>
+          <p class="intro-copy">
+            Загрузите JPG, PNG, WebP или GIF. Настройки применяются сразу, а результат можно скачать как PNG или UTF-8 TXT.
+          </p>
+        </div>
+        <div class="privacy-note">
+          <span class="privacy-icon" aria-hidden="true">⌁</span>
+          <div><strong>Локальная обработка</strong><br /><span>Файл не покидает ваше устройство</span></div>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Конвертер изображений">
+        <div class="work-area">
+          <div class="panels">
+            <article class="panel source-panel">
+              <div class="panel-heading">
+                <span><b>01</b> ИСХОДНИК</span>
+                <span id="sourceMeta" class="panel-meta">ДЕМО</span>
+              </div>
+              <label id="dropZone" class="source-stage" for="fileInput">
+                <img id="sourceImage" alt="Предпросмотр исходного изображения" />
+                <span class="upload-overlay">
+                  <span class="upload-icon" aria-hidden="true">＋</span>
+                  <strong>Выберите изображение</strong>
+                  <small>или перетащите его сюда</small>
+                </span>
+              </label>
+              <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+              <button id="chooseButton" class="secondary-button" type="button">Загрузить другое изображение</button>
+            </article>
+
+            <article class="panel result-panel">
+              <div class="panel-heading">
+                <span><b>02</b> РЕЗУЛЬТАТ</span>
+                <span id="resultMeta" class="panel-meta">—</span>
+              </div>
+              <div id="asciiViewport" class="ascii-viewport" tabindex="0" aria-label="Предпросмотр ASCII-результата">
+                <pre id="asciiOutput" aria-live="polite"></pre>
+              </div>
+              <div class="result-actions">
+                <button id="downloadPng" class="primary-button" type="button">↓ Скачать PNG</button>
+                <button id="downloadTxt" class="secondary-button" type="button">↓ Скачать TXT</button>
+                <button id="copyText" class="icon-button" type="button" title="Копировать текст" aria-label="Копировать ASCII-текст">▣</button>
+              </div>
+            </article>
+          </div>
+
+          <p id="statusMessage" class="status-message" role="status">
+            Сейчас показан встроенный пример. Загрузите своё изображение, чтобы начать.
+          </p>
+        </div>
+
+        <aside class="controls" aria-label="Настройки преобразования">
+          <div class="controls-heading">
+            <span>НАСТРОЙКИ</span>
+            <button id="resetButton" type="button">Сбросить</button>
+          </div>
+
+          <fieldset>
+            <legend>Стиль символов</legend>
+            <div class="style-grid">
+              <label class="style-card">
+                <input type="radio" name="style" value="classic" checked />
+                <span class="style-preview">.:-=+#@</span>
+                <strong>Классика</strong>
+                <small>Плотность ASCII-знаков</small>
+              </label>
+              <label class="style-card">
+                <input type="radio" name="style" value="braille" />
+                <span class="style-preview braille-preview">⠐⢀⣤⣿</span>
+                <strong>Unicode Braille</strong>
+                <small>Точечный стиль 2×4</small>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Цвет результата</legend>
+            <div class="segmented-control">
+              <label><input type="radio" name="colorMode" value="mono" checked /><span>Чёрно-белый</span></label>
+              <label><input type="radio" name="colorMode" value="color" /><span>Цветной</span></label>
+            </div>
+          </fieldset>
+
+          <div class="control-group">
+            <label for="gridWidth">Детализация <output id="gridValue" for="gridWidth">88 столбцов</output></label>
+            <input id="gridWidth" type="range" min="32" max="180" value="88" step="1" />
+          </div>
+
+          <div class="control-group">
+            <label for="contrast">Контраст <output id="contrastValue" for="contrast">1.2</output></label>
+            <input id="contrast" type="range" min="0.5" max="2.5" value="1.2" step="0.1" />
+          </div>
+
+          <div class="control-group">
+            <label for="brightness">Яркость <output id="brightnessValue" for="brightness">0</output></label>
+            <input id="brightness" type="range" min="-80" max="80" value="0" step="1" />
+          </div>
+
+          <div class="control-group">
+            <label for="palette">Набор символов</label>
+            <select id="palette">
+              <option value="dense">Console dense</option>
+              <option value="classic">Classic</option>
+              <option value="blocks">Blocks</option>
+              <option value="minimal">Minimal</option>
+            </select>
+          </div>
+
+          <label class="switch-row">
+            <span><strong>Инверсия</strong><small>Поменять свет и тень местами</small></span>
+            <input id="invert" type="checkbox" role="switch" />
+          </label>
+
+          <div class="demo-limit">
+            <strong>Нужны видео и анимация?</strong>
+            <p>MP4/GIF, звук, точное число символов и серверный экспорт доступны в полной Docker-версии.</p>
+            <a href="https://github.com/mikko2281/ascii-motion#быстрый-запуск" target="_blank" rel="noreferrer">Открыть инструкцию на GitHub →</a>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <footer>
+      <span>ASCII MOTION / STATIC DEMO</span>
+      <span>JPG · PNG · WEBP · GIF (КАДР)</span>
+    </footer>
+
+    <canvas id="workCanvas" hidden></canvas>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
