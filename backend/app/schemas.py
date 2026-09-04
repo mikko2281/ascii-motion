@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class AsciiSettings(BaseModel):
@@ -21,6 +21,14 @@ class AsciiSettings(BaseModel):
     mode: Literal["monochrome", "original_colors"] = "monochrome"
     normalize_contrast: bool = True
     temporal_smoothing: float = Field(0.2, ge=0.0, le=0.85)
+    output_width: int | None = Field(None, ge=160, le=3840, multiple_of=2)
+    output_height: int | None = Field(None, ge=90, le=3840, multiple_of=2)
+
+    @model_validator(mode="after")
+    def validate_output_resolution(self) -> "AsciiSettings":
+        if (self.output_width is None) != (self.output_height is None):
+            raise ValueError("Для разрешения результата укажите одновременно ширину и высоту.")
+        return self
 
     @field_validator("character_color", "background_color")
     @classmethod
@@ -50,6 +58,16 @@ class ImageAsciiSettings(BaseModel):
     character_set: Literal["console", "classic", "detailed", "minimal", "braille"] = "console"
     mode: Literal["monochrome", "original_colors"] = "monochrome"
     normalize_contrast: bool = True
+    output_width: int | None = Field(None, ge=64, le=4096)
+    output_height: int | None = Field(None, ge=64, le=4096)
+    output_format: Literal["png", "jpeg", "webp"] = "png"
+    quality: Literal["draft", "balanced", "high"] = "balanced"
+
+    @model_validator(mode="after")
+    def validate_output_resolution(self) -> "ImageAsciiSettings":
+        if (self.output_width is None) != (self.output_height is None):
+            raise ValueError("Для разрешения результата укажите одновременно ширину и высоту.")
+        return self
 
     @field_validator("character_color", "background_color")
     @classmethod
@@ -79,6 +97,10 @@ class ImageJobResponse(BaseModel):
     source_url: str
     result_image_url: str | None = None
     result_text_url: str | None = None
+    result_format: Literal["png", "jpeg", "webp"] | None = None
+    result_width: int | None = None
+    result_height: int | None = None
+    result_size_bytes: int | None = None
 
 
 class UrlImportRequest(BaseModel):
@@ -97,3 +119,6 @@ class JobResponse(BaseModel):
     preview_url: str | None = None
     result_url: str | None = None
     result_format: Literal["mp4", "gif"] | None = None
+    result_width: int | None = None
+    result_height: int | None = None
+    result_size_bytes: int | None = None

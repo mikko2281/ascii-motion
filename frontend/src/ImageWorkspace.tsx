@@ -25,6 +25,10 @@ interface ImageJob {
   result_image_url: string | null
   result_text_url: string | null
   source_url: string
+  result_format: 'png' | 'jpeg' | 'webp' | null
+  result_width: number | null
+  result_height: number | null
+  result_size_bytes: number | null
 }
 
 interface ImageOptions {
@@ -39,6 +43,10 @@ interface ImageOptions {
   character_set: 'console' | 'classic' | 'detailed' | 'minimal' | 'braille'
   mode: 'monochrome' | 'original_colors'
   normalize_contrast: boolean
+  output_width: number | null
+  output_height: number | null
+  output_format: 'png' | 'jpeg' | 'webp'
+  quality: 'draft' | 'balanced' | 'high'
 }
 
 const defaults: ImageOptions = {
@@ -53,7 +61,13 @@ const defaults: ImageOptions = {
   character_set: 'console',
   mode: 'monochrome',
   normalize_contrast: true,
+  output_width: null,
+  output_height: null,
+  output_format: 'png',
+  quality: 'balanced',
 }
+
+const outputResolutionPresets = ['640x360', '1280x720', '1920x1080', '1080x1080', '1080x1350'] as const
 
 function messageFromResponse(response: Response): Promise<string> {
   return response.json()
@@ -373,10 +387,13 @@ export default function ImageWorkspace() {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  const imageDownload = job ? `/api/images/${job.id}/result?format=png&download=true` : '#'
+  const resultFormat = job?.result_format || options.output_format
+  const imageDownload = job ? `/api/images/${job.id}/result?format=${resultFormat}&download=true` : '#'
   const textDownload = job ? `/api/images/${job.id}/result?format=txt&download=true` : '#'
-  const mediaAspect = job ? { '--media-aspect': `${job.image.width} / ${job.image.height}` } as CSSProperties : undefined
+  const mediaAspect = job ? { '--media-aspect': `${job.result_width || job.image.width} / ${job.result_height || job.image.height}` } as CSSProperties : undefined
   const renderedCharacterCount = textResult.replace(/\r?\n/g, '').length
+  const configuredResolution = options.output_width && options.output_height ? `${options.output_width}x${options.output_height}` : 'auto'
+  const resolutionValue = configuredResolution === 'auto' || outputResolutionPresets.includes(configuredResolution as typeof outputResolutionPresets[number]) ? configuredResolution : 'custom'
 
   return (
     <div className="workspace image-workspace">
@@ -436,7 +453,7 @@ export default function ImageWorkspace() {
                 {sourceUrl && <img className="source-image" src={sourceUrl} alt="Исходное изображение" />}
               </article>
               <article className="media-card result-card">
-                <div className="card-label"><span>02</span> ASCII-изображение{renderedCharacterCount > 0 && <small className="card-meta">{renderedCharacterCount.toLocaleString('ru-RU')} симв.</small>}</div>
+                <div className="card-label"><span>02</span> ASCII-изображение{renderedCharacterCount > 0 && <small className="card-meta">{renderedCharacterCount.toLocaleString('ru-RU')} симв.{job?.result_width && job.result_height ? ` · ${job.result_width}×${job.result_height}` : ''}</small>}</div>
                 <div className="preview-surface" style={{ backgroundColor: options.background_color }}>
                   {job?.result_image_url
                     ? <img src={job.result_image_url} alt="Результат в виде ASCII-изображения" />
@@ -451,7 +468,7 @@ export default function ImageWorkspace() {
 
             {job?.status === 'completed' && (
               <div className="image-downloads">
-                <a className="download-button" href={imageDownload} download="ascii-image.png"><Download size={18} /> Скачать PNG</a>
+                <a className="download-button" href={imageDownload} download={`ascii-image.${resultFormat}`}><Download size={18} /> Скачать {resultFormat.toUpperCase()}{job.result_size_bytes ? ` · ${formatSize(job.result_size_bytes)}` : ''}</a>
                 <a className="download-button secondary-download" href={textDownload} download="ascii-image.txt"><FileText size={18} /> Скачать TXT</a>
               </div>
             )}
@@ -517,6 +534,18 @@ export default function ImageWorkspace() {
         </div>
 
         <div className="select-grid image-select-grid">
+          <label className="wide-select"><span>Разрешение изображения</span><select value={resolutionValue} onChange={(event) => {
+            const value = event.target.value
+            if (value === 'auto') setOptions((current) => ({ ...current, output_width: null, output_height: null }))
+            else if (value === 'custom') setOptions((current) => ({ ...current, output_width: current.output_width || 1280, output_height: current.output_height || 720 }))
+            else {
+              const [width, height] = value.split('x').map(Number)
+              setOptions((current) => ({ ...current, output_width: width, output_height: height }))
+            }
+          }}><option value="auto">Авто · по размеру ASCII-сетки</option><option value="640x360">640×360 · компактное</option><option value="1280x720">1280×720 · HD</option><option value="1920x1080">1920×1080 · Full HD</option><option value="1080x1080">1080×1080 · квадрат</option><option value="1080x1350">1080×1350 · вертикальное</option><option value="custom">Своё разрешение</option></select></label>
+          {resolutionValue === 'custom' && <div className="resolution-inputs wide-select"><label><span>Ширина</span><input type="number" min="64" max="4096" value={options.output_width || 1280} onChange={(event) => patchOption('output_width', Math.max(64, Math.min(4096, Number(event.target.value))))} /></label><b>×</b><label><span>Высота</span><input type="number" min="64" max="4096" value={options.output_height || 720} onChange={(event) => patchOption('output_height', Math.max(64, Math.min(4096, Number(event.target.value))))} /></label></div>}
+          <label><span>Формат файла</span><select value={options.output_format} onChange={(event) => patchOption('output_format', event.target.value as ImageOptions['output_format'])}><option value="webp">WebP · самый компактный</option><option value="jpeg">JPEG · совместимый</option><option value="png">PNG · без потерь</option></select></label>
+          <label><span>Сжатие файла</span><select value={options.quality} onChange={(event) => patchOption('quality', event.target.value as ImageOptions['quality'])}><option value="draft">Сильное · меньше файл</option><option value="balanced">Сбалансированное</option><option value="high">Мягкое · лучше качество</option></select></label>
           <label className="wide-select"><span>Набор символов</span><select value={options.character_set} onChange={(event) => patchOption('character_set', event.target.value as ImageOptions['character_set'])}><option value="console">Console dense</option><option value="classic">Classic</option><option value="detailed">Detailed</option><option value="minimal">Minimal</option><option value="braille">Unicode / Braille 2×4</option></select></label>
         </div>
 
@@ -531,7 +560,7 @@ export default function ImageWorkspace() {
           {processing ? <LoaderCircle className="spin" size={18} /> : <WandSparkles size={18} />}
           {processing ? 'Обновление…' : 'Обновить сейчас'}
         </button>
-        <div className="sound-note"><FileText size={15} /> PNG и TXT обновляются после каждого изменения</div>
+        <div className="sound-note"><FileText size={15} /> Изображение сжимается выбранным кодеком; TXT остаётся без изменений</div>
       </aside>
     </div>
   )

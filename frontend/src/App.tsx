@@ -43,6 +43,9 @@ interface Job {
   result_format: 'mp4' | 'gif' | null
   source_url: string | null
   source_format: 'mp4' | 'gif' | null
+  result_width: number | null
+  result_height: number | null
+  result_size_bytes: number | null
 }
 
 interface Options {
@@ -61,6 +64,8 @@ interface Options {
   mode: 'monochrome' | 'original_colors'
   normalize_contrast: boolean
   temporal_smoothing: number
+  output_width: number | null
+  output_height: number | null
 }
 
 interface ModelContext {
@@ -95,7 +100,11 @@ const defaults: Options = {
   mode: 'monochrome',
   normalize_contrast: true,
   temporal_smoothing: 0.2,
+  output_width: null,
+  output_height: null,
 }
+
+const outputResolutionPresets = ['640x360', '1280x720', '1920x1080', '1080x1080', '1080x1350'] as const
 
 const stageLabels: Record<string, string> = {
   uploading: 'Загрузка',
@@ -283,6 +292,8 @@ export default function App() {
           fps: { type: 'integer', minimum: 6, maximum: 60 },
           quality: { type: 'string', enum: ['draft', 'balanced', 'high'] },
           output_format: { type: 'string', enum: ['mp4', 'gif'] },
+          output_width: { type: 'integer', minimum: 160, maximum: 3840, multipleOf: 2 },
+          output_height: { type: 'integer', minimum: 90, maximum: 3840, multipleOf: 2 },
           keep_audio: { type: 'boolean' },
           invert: { type: 'boolean' },
         },
@@ -300,7 +311,7 @@ export default function App() {
             patch[key] = value as never
           }
         }
-        const numberValue = (key: 'grid_width' | 'character_size' | 'contrast' | 'brightness' | 'fps', min: number, max: number) => {
+        const numberValue = (key: 'grid_width' | 'character_size' | 'contrast' | 'brightness' | 'fps' | 'output_width' | 'output_height', min: number, max: number) => {
           const value = candidate[key]
           if (value !== undefined) {
             if (typeof value !== 'number' || value < min || value > max) throw new Error(`Invalid ${key}.`)
@@ -315,6 +326,10 @@ export default function App() {
         numberValue('contrast', 0.5, 3)
         numberValue('brightness', -100, 100)
         numberValue('fps', 6, 60)
+        if ((candidate.output_width === undefined) !== (candidate.output_height === undefined)) throw new Error('output_width and output_height must be set together.')
+        numberValue('output_width', 160, 3840)
+        numberValue('output_height', 90, 3840)
+        if ((patch.output_width && patch.output_width % 2) || (patch.output_height && patch.output_height % 2)) throw new Error('Video resolution must use even numbers.')
         for (const key of ['keep_audio', 'invert'] as const) {
           const value = candidate[key]
           if (value !== undefined) {
@@ -557,6 +572,8 @@ export default function App() {
   const resultUrl = job?.result_url ? `${job.result_url}?inline=1` : null
   const selectedOutputFormat = options.output_format || 'mp4'
   const resultFormat = job?.result_format || selectedOutputFormat
+  const configuredResolution = options.output_width && options.output_height ? `${options.output_width}x${options.output_height}` : 'auto'
+  const resolutionValue = configuredResolution === 'auto' || outputResolutionPresets.includes(configuredResolution as typeof outputResolutionPresets[number]) ? configuredResolution : 'custom'
   const isGif = job?.source_format === 'gif' || (file?.name.toLowerCase().endsWith('.gif') ?? false)
   const mediaAspect = job?.video ? { '--media-aspect': `${job.video.width} / ${job.video.height}` } as CSSProperties : undefined
 
@@ -708,7 +725,7 @@ export default function App() {
 
             {job?.status === 'completed' && resultUrl && (
               <section className="final-result adaptive-final-result" style={mediaAspect}>
-                <div className="card-label"><span>03</span> Готовый результат</div>
+                <div className="card-label"><span>03</span> Готовый результат{job.result_width && job.result_height && <small className="card-meta">{job.result_width}×{job.result_height}{job.result_size_bytes ? ` · ${formatSize(job.result_size_bytes)}` : ''}</small>}</div>
                 {resultFormat === 'gif'
                   ? <img className="result-gif" src={resultUrl} alt="Готовая ASCII GIF-анимация" />
                   : <video controls playsInline src={resultUrl} />
@@ -757,9 +774,19 @@ export default function App() {
 
             <div className="select-grid">
               <label className="wide-select"><span>Формат результата</span><select value={selectedOutputFormat} onChange={(event) => patchOptions('output_format', event.target.value as Options['output_format'])}><option value="mp4">MP4 · видео со звуком</option><option value="gif">GIF · зацикленная анимация</option></select></label>
+              <label className="wide-select"><span>Разрешение результата</span><select value={resolutionValue} onChange={(event) => {
+                const value = event.target.value
+                if (value === 'auto') setOptions((current) => ({ ...current, output_width: null, output_height: null }))
+                else if (value === 'custom') setOptions((current) => ({ ...current, output_width: current.output_width || 1280, output_height: current.output_height || 720 }))
+                else {
+                  const [width, height] = value.split('x').map(Number)
+                  setOptions((current) => ({ ...current, output_width: width, output_height: height }))
+                }
+              }}><option value="auto">Авто · по размеру ASCII-сетки</option><option value="640x360">640×360 · компактное</option><option value="1280x720">1280×720 · HD</option><option value="1920x1080">1920×1080 · Full HD</option><option value="1080x1080">1080×1080 · квадрат</option><option value="1080x1350">1080×1350 · вертикальное</option><option value="custom">Своё разрешение</option></select></label>
+              {resolutionValue === 'custom' && <div className="resolution-inputs wide-select"><label><span>Ширина</span><input type="number" min="160" max="3840" step="2" value={options.output_width || 1280} onChange={(event) => patchOptions('output_width', Math.max(160, Math.min(3840, Math.round(Number(event.target.value) / 2) * 2)))} /></label><b>×</b><label><span>Высота</span><input type="number" min="90" max="3840" step="2" value={options.output_height || 720} onChange={(event) => patchOptions('output_height', Math.max(90, Math.min(3840, Math.round(Number(event.target.value) / 2) * 2)))} /></label></div>}
               <label className="wide-select"><span>Набор символов</span><select value={options.character_set} onChange={(event) => patchOptions('character_set', event.target.value as Options['character_set'])}><option value="console">Console dense</option><option value="classic">Classic</option><option value="detailed">Detailed</option><option value="minimal">Minimal</option><option value="braille">Unicode / Braille 2×4</option></select></label>
               <label><span>FPS результата</span><select value={options.fps} onChange={(event) => patchOptions('fps', Number(event.target.value))}><option value="12">12 FPS</option><option value="20">20 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option><option value="60">60 FPS</option></select></label>
-              <label><span>Качество MP4</span><select disabled={selectedOutputFormat === 'gif'} value={options.quality} onChange={(event) => patchOptions('quality', event.target.value as Options['quality'])}><option value="draft">Черновик</option><option value="balanced">Баланс</option><option value="high">Высокое</option></select></label>
+              <label><span>Сжатие файла</span><select value={options.quality} onChange={(event) => patchOptions('quality', event.target.value as Options['quality'])}><option value="draft">Сильное · меньше файл</option><option value="balanced">Сбалансированное</option><option value="high">Мягкое · лучше качество</option></select></label>
             </div>
 
             {options.mode === 'monochrome' && <div className="color-row"><label><span>Символы</span><input type="color" value={options.character_color} onChange={(event) => patchOptions('character_color', event.target.value)} /></label><label><span>Фон</span><input type="color" value={options.background_color} onChange={(event) => patchOptions('background_color', event.target.value)} /></label></div>}
@@ -776,7 +803,7 @@ export default function App() {
               {isProcessing ? <LoaderCircle className="spin" size={18} /> : <Play size={18} fill="currentColor" />}
               Преобразовать в ASCII · {selectedOutputFormat.toUpperCase()}
             </button>
-            <div className="sound-note">{selectedOutputFormat === 'gif' || !options.keep_audio ? <VolumeX size={15} /> : <Volume2 size={15} />} {selectedOutputFormat === 'gif' ? 'GIF будет зациклен и сохранён без звука' : job?.video && !job.video.has_audio ? 'GIF и этот исходник не содержат звука' : options.keep_audio ? 'Звук будет синхронизирован с результатом' : 'Звуковая дорожка будет удалена'}</div>
+            <div className="sound-note">{selectedOutputFormat === 'gif' || !options.keep_audio ? <VolumeX size={15} /> : <Volume2 size={15} />} {selectedOutputFormat === 'gif' ? 'GIF будет сжат оптимизированной палитрой и сохранён без звука' : job?.video && !job.video.has_audio ? 'Исходник не содержит звука; MP4 будет сжат кодеком H.264' : options.keep_audio ? 'H.264 сожмёт видео, звук будет синхронизирован' : 'H.264 сожмёт видео без звуковой дорожки'}</div>
           </aside>
         </div>
 

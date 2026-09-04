@@ -104,6 +104,8 @@ def test_complete_mp4_pipeline(tmp_path: Path) -> None:
                 "keep_audio": True,
                 "character_set": "braille",
                 "mode": "original_colors",
+                "output_width": 640,
+                "output_height": 360,
             },
         )
         assert started.status_code == 202, started.text
@@ -114,6 +116,9 @@ def test_complete_mp4_pipeline(tmp_path: Path) -> None:
                 break
             time.sleep(0.2)
         assert status["status"] == "completed", status
+        assert status["result_width"] == 640
+        assert status["result_height"] == 360
+        assert status["result_size_bytes"] > 0
 
         result = client.get(status["result_url"])
         assert result.status_code == 200
@@ -124,7 +129,8 @@ def test_complete_mp4_pipeline(tmp_path: Path) -> None:
             assert capture.isOpened()
             ok, frame = capture.read()
             assert ok and frame is not None
-            assert frame.shape[1] >= 200
+            assert frame.shape[1] == 640
+            assert frame.shape[0] == 360
             assert frame.shape[0] % 2 == 0 and frame.shape[1] % 2 == 0
         finally:
             capture.release()
@@ -184,6 +190,8 @@ def test_complete_animated_gif_pipeline(tmp_path: Path) -> None:
                 "quality": "draft",
                 "mode": "original_colors",
                 "output_format": "gif",
+                "output_width": 320,
+                "output_height": 180,
             },
         )
         assert started.status_code == 202, started.text
@@ -194,6 +202,8 @@ def test_complete_animated_gif_pipeline(tmp_path: Path) -> None:
                 break
             time.sleep(0.2)
         assert status["status"] == "completed", status
+        assert status["result_width"] == 320
+        assert status["result_height"] == 180
 
         result = client.get(status["result_url"])
         assert result.status_code == 200
@@ -205,5 +215,6 @@ def test_complete_animated_gif_pipeline(tmp_path: Path) -> None:
             assert animation.is_animated
             assert animation.n_frames >= 8
             assert animation.info.get("loop") == 0
+            assert animation.size == (320, 180)
 
         assert client.delete(f"/api/jobs/{job['id']}").status_code == 204

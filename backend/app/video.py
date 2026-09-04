@@ -175,6 +175,27 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(value[index : index + 2], 16) for index in (1, 3, 5))
 
 
+def _output_dimensions(render_width: int, render_height: int, options: AsciiSettings) -> tuple[int, int]:
+    return options.output_width or render_width, options.output_height or render_height
+
+
+def _fit_output_frame(frame_bgr: np.ndarray, width: int, height: int, background_color: str) -> np.ndarray:
+    if frame_bgr.shape[1] == width and frame_bgr.shape[0] == height:
+        return frame_bgr
+    source_height, source_width = frame_bgr.shape[:2]
+    scale = min(width / source_width, height / source_height)
+    fitted_width = max(1, min(width, round(source_width * scale)))
+    fitted_height = max(1, min(height, round(source_height * scale)))
+    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
+    fitted = cv2.resize(frame_bgr, (fitted_width, fitted_height), interpolation=interpolation)
+    red, green, blue = _hex_to_rgb(background_color)
+    canvas = np.full((height, width, 3), (blue, green, red), dtype=np.uint8)
+    offset_x = (width - fitted_width) // 2
+    offset_y = (height - fitted_height) // 2
+    canvas[offset_y : offset_y + fitted_height, offset_x : offset_x + fitted_width] = fitted
+    return canvas
+
+
 class AsciiRenderer:
     def __init__(
         self,
@@ -406,6 +427,8 @@ def create_preview(input_path: Path, output_path: Path, info: VideoInfo, options
     frame = np.frombuffer(decoded.stdout[:expected_bytes], dtype=np.uint8).reshape((info.height, info.width, 3))
     renderer = AsciiRenderer(info.width, info.height, options)
     rendered = renderer.render(frame, use_temporal_smoothing=False)
+    output_width, output_height = _output_dimensions(renderer.width, renderer.height, options)
+    rendered = _fit_output_frame(rendered, output_width, output_height, options.background_color)
     if not cv2.imwrite(str(output_path), rendered):
         raise RuntimeError("Не удалось сохранить предпросмотр.")
 
@@ -430,8 +453,9 @@ def convert_video(
     options: AsciiSettings,
     cancelled: Callable[[], bool],
     progress: Callable[[str, int], None],
-) -> None:
+) -> tuple[int, int]:
     renderer = AsciiRenderer(info.width, info.height, options)
+    output_width, output_height = _output_dimensions(renderer.width, renderer.height, options)
     is_gif_output = options.output_format == "gif"
     encoded_path = work_dir / ("encoded-animation.gif" if is_gif_output else "encoded-video.mp4")
     expected_frames = max(1, math.ceil(info.duration * options.fps))
@@ -462,7 +486,7 @@ def convert_video(
         "-pix_fmt",
         "bgr24",
         "-s",
-        f"{renderer.width}x{renderer.height}",
+        f"{output_width}x{output_height}",
         "-r",
         str(options.fps),
         "-i",
@@ -470,10 +494,11 @@ def convert_video(
         "-an",
     ]
     if is_gif_output:
+        max_colors = {"draft": 64, "balanced": 128, "high": 256}[options.quality]
         encoding_command.extend(
             [
                 "-filter_complex",
-                "[0:v]split[gif_a][gif_b];[gif_a]palettegen=stats_mode=single[palette];[gif_b][palette]paletteuse=new=1:dither=sierra2_4a:diff_mode=rectangle",
+                f"[0:v]split[gif_a][gif_b];[gif_a]palettegen=max_colors={max_colors}:stats_mode=single[palette];[gif_b][palette]paletteuse=new=1:dither=sierra2_4a:diff_mode=rectangle",
                 "-loop",
                 "0",
                 str(encoded_path),
@@ -519,6 +544,7 @@ def convert_video(
                 raise RuntimeError("FFmpeg вернул неполный кадр при декодировании.")
             frame = np.frombuffer(raw_frame, dtype=np.uint8).reshape((info.height, info.width, 3))
             rendered = renderer.render(frame)
+            rendered = _fit_output_frame(rendered, output_width, output_height, options.background_color)
             encoder.stdin.write(rendered.tobytes())
             output_index += 1
             percent = 20 + int(65 * output_index / expected_frames)
@@ -553,7 +579,7 @@ def convert_video(
     if is_gif_output:
         shutil.move(str(encoded_path), str(output_path))
         progress("assembling", 98)
-        return
+        return output_width, output_height
     if options.keep_audio and info.has_audio:
         mux = _run(
             [
@@ -575,7 +601,7 @@ def convert_video(
                 "-c:a",
                 "aac",
                 "-b:a",
-                "192k",
+                {"draft": "96k", "balanced": "128k", "high": "192k"}[options.quality],
                 "-shortest",
                 "-movflags",
                 "+faststart",
@@ -588,3 +614,4 @@ def convert_video(
     else:
         shutil.move(str(encoded_path), str(output_path))
     progress("assembling", 98)
+    return output_width, output_height

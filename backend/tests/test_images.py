@@ -89,6 +89,37 @@ def test_image_to_png_and_text(tmp_path: Path) -> None:
         assert all(0x2800 <= ord(character) <= 0x28FF for character in exact_characters)
         assert any(character != "\u2800" for character in exact_characters)
 
+        compressed = client.post(
+            f"/api/images/{job['id']}/process",
+            json={
+                "grid_width": 52,
+                "character_size": 9,
+                "output_width": 320,
+                "output_height": 240,
+                "output_format": "jpeg",
+                "quality": "draft",
+            },
+        )
+        assert compressed.status_code == 200, compressed.text
+        compressed_job = compressed.json()
+        assert compressed_job["result_format"] == "jpeg"
+        assert compressed_job["result_width"] == 320
+        assert compressed_job["result_height"] == 240
+        assert compressed_job["result_size_bytes"] > 0
+        compressed_image = client.get(compressed_job["result_image_url"])
+        assert compressed_image.headers["content-type"].startswith("image/jpeg")
+        compressed_output = tmp_path / "compressed.jpg"
+        compressed_output.write_bytes(compressed_image.content)
+        with Image.open(compressed_output) as rendered:
+            assert rendered.format == "JPEG"
+            assert rendered.size == (320, 240)
+
+        invalid_resolution = client.post(
+            f"/api/images/{job['id']}/process",
+            json={"output_width": 640},
+        )
+        assert invalid_resolution.status_code == 422
+
         assert client.delete(f"/api/images/{job['id']}").status_code == 204
 
 

@@ -33,6 +33,12 @@
     brightness: document.querySelector("#brightness"),
     brightnessValue: document.querySelector("#brightnessValue"),
     palette: document.querySelector("#palette"),
+    outputResolution: document.querySelector("#outputResolution"),
+    customResolution: document.querySelector("#customResolution"),
+    outputWidth: document.querySelector("#outputWidth"),
+    outputHeight: document.querySelector("#outputHeight"),
+    outputFormat: document.querySelector("#outputFormat"),
+    compressionQuality: document.querySelector("#compressionQuality"),
     invert: document.querySelector("#invert"),
     resetButton: document.querySelector("#resetButton"),
     downloadPng: document.querySelector("#downloadPng"),
@@ -62,6 +68,11 @@
       brightness: Number(elements.brightness.value),
       palette: elements.palette.value,
       invert: elements.invert.checked,
+      outputResolution: elements.outputResolution.value,
+      outputWidth: clamp(Number(elements.outputWidth.value) || 1280, 64, 4096),
+      outputHeight: clamp(Number(elements.outputHeight.value) || 720, 64, 4096),
+      outputFormat: elements.outputFormat.value,
+      compressionQuality: Number(elements.compressionQuality.value),
     };
   }
 
@@ -82,6 +93,9 @@
     const brightness = Number(elements.brightness.value);
     elements.brightnessValue.value = brightness > 0 ? `+${brightness}` : String(brightness);
     elements.palette.disabled = selectedValue("style") === "braille";
+    elements.customResolution.hidden = elements.outputResolution.value !== "custom";
+    const formatLabel = elements.outputFormat.value === "jpeg" ? "JPEG" : elements.outputFormat.value.toUpperCase();
+    elements.downloadPng.textContent = `↓ Скачать ${formatLabel}`;
   }
 
   function setStatus(message, kind = "") {
@@ -186,7 +200,8 @@
     elements.asciiOutput.replaceChildren(outputFragment);
     state.renderedRows = renderedRows;
     state.plainText = renderedRows.map((line) => line.map((cell) => cell.character).join("")).join("\n");
-    elements.resultMeta.textContent = `${columns} × ${rows} / ${columns * rows} символов`;
+    const outputLabel = options.outputResolution === "auto" ? "авто" : options.outputResolution === "custom" ? `${options.outputWidth}×${options.outputHeight}` : options.outputResolution.replace("x", "×");
+    elements.resultMeta.textContent = `${columns} × ${rows} / ${columns * rows} символов · ${outputLabel}`;
     fitPreview(columns, rows);
   }
 
@@ -302,11 +317,30 @@
       });
     });
 
-    canvas.toBlob((blob) => {
+    let exportCanvas = canvas;
+    if (options.outputResolution !== "auto") {
+      const dimensions = options.outputResolution === "custom"
+        ? [options.outputWidth, options.outputHeight]
+        : options.outputResolution.split("x").map(Number);
+      const [targetWidth, targetHeight] = dimensions;
+      exportCanvas = document.createElement("canvas");
+      exportCanvas.width = targetWidth;
+      exportCanvas.height = targetHeight;
+      const exportContext = exportCanvas.getContext("2d");
+      exportContext.fillStyle = "#050707";
+      exportContext.fillRect(0, 0, targetWidth, targetHeight);
+      const scale = Math.min(targetWidth / canvas.width, targetHeight / canvas.height);
+      const fittedWidth = Math.round(canvas.width * scale);
+      const fittedHeight = Math.round(canvas.height * scale);
+      exportContext.drawImage(canvas, Math.floor((targetWidth - fittedWidth) / 2), Math.floor((targetHeight - fittedHeight) / 2), fittedWidth, fittedHeight);
+    }
+    const mimeType = options.outputFormat === "jpeg" ? "image/jpeg" : `image/${options.outputFormat}`;
+    const extension = options.outputFormat === "jpeg" ? "jpg" : options.outputFormat;
+    exportCanvas.toBlob((blob) => {
       if (!blob) return;
-      downloadBlob(blob, `${state.sourceName}-ascii.png`);
-      setStatus("PNG-изображение сохранено.", "success");
-    }, "image/png");
+      downloadBlob(blob, `${state.sourceName}-ascii.${extension}`);
+      setStatus(`${options.outputFormat.toUpperCase()}-изображение сжато и сохранено.`, "success");
+    }, mimeType, options.compressionQuality);
   }
 
   async function copyText() {
@@ -326,6 +360,11 @@
     elements.brightness.value = "0";
     elements.palette.value = "dense";
     elements.invert.checked = false;
+    elements.outputResolution.value = "auto";
+    elements.outputWidth.value = "1280";
+    elements.outputHeight.value = "720";
+    elements.outputFormat.value = "webp";
+    elements.compressionQuality.value = "0.78";
     scheduleRender();
     setStatus("Настройки возвращены к исходным.", "success");
   }
@@ -343,7 +382,7 @@
     handleFile(event.dataTransfer.files[0]);
   });
 
-  document.querySelectorAll('input[name="style"], input[name="colorMode"], #gridWidth, #contrast, #brightness, #palette, #invert').forEach((control) => {
+  document.querySelectorAll('input[name="style"], input[name="colorMode"], #gridWidth, #contrast, #brightness, #palette, #invert, #outputResolution, #outputWidth, #outputHeight, #outputFormat, #compressionQuality').forEach((control) => {
     control.addEventListener("input", scheduleRender);
     control.addEventListener("change", scheduleRender);
   });

@@ -43,6 +43,9 @@ class Job:
     preview_path: Path | None = None
     result_path: Path | None = None
     result_format: str | None = None
+    result_width: int | None = None
+    result_height: int | None = None
+    result_size_bytes: int | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
     task: asyncio.Task[None] | None = None
 
@@ -57,6 +60,10 @@ class ImageJob:
     message: str | None = None
     result_image_path: Path | None = None
     result_text_path: Path | None = None
+    result_format: str | None = None
+    result_width: int | None = None
+    result_height: int | None = None
+    result_size_bytes: int | None = None
 
 
 
@@ -91,6 +98,9 @@ def public_job(job: Job) -> JobResponse:
         preview_url=f"/api/jobs/{job.id}/preview?t={time.time_ns()}" if job.preview_path else None,
         result_url=f"/api/jobs/{job.id}/result" if job.result_path else None,
         result_format=job.result_format,
+        result_width=job.result_width,
+        result_height=job.result_height,
+        result_size_bytes=job.result_size_bytes,
     )
 
 
@@ -109,8 +119,12 @@ def public_image_job(job: ImageJob) -> ImageJobResponse:
         message=job.message,
         image=job.info,
         source_url=f"/api/images/{job.id}/source",
-        result_image_url=f"/api/images/{job.id}/result?format=png&t={cache_key}" if job.result_image_path else None,
+        result_image_url=f"/api/images/{job.id}/result?format={job.result_format}&t={cache_key}" if job.result_image_path else None,
         result_text_url=f"/api/images/{job.id}/result?format=txt&t={cache_key}" if job.result_text_path else None,
+        result_format=job.result_format,
+        result_width=job.result_width,
+        result_height=job.result_height,
+        result_size_bytes=job.result_size_bytes,
     )
 
 
@@ -272,18 +286,38 @@ def get_image_source(job_id: str) -> FileResponse:
 @app.post("/api/images/{job_id}/process", response_model=ImageJobResponse)
 async def process_image_job(job_id: str, options: ImageAsciiSettings) -> ImageJobResponse:
     job = get_image_job(job_id)
-    image_result = job.directory / "ascii-image.png"
+    image_result = job.directory / f"ascii-image.{options.output_format}"
     text_result = job.directory / "ascii-image.txt"
     try:
-        await asyncio.to_thread(convert_image, job.input_path, image_result, text_result, job.info, options)
+        for old_result in job.directory.glob("ascii-image.*"):
+            if old_result.name != text_result.name:
+                old_result.unlink(missing_ok=True)
+        result_width, result_height = await asyncio.to_thread(
+            convert_image,
+            job.input_path,
+            image_result,
+            text_result,
+            job.info,
+            options,
+        )
         job.result_image_path = image_result
         job.result_text_path = text_result
+        job.result_format = options.output_format
+        job.result_width = result_width
+        job.result_height = result_height
+        job.result_size_bytes = image_result.stat().st_size
         job.status = "completed"
         job.message = None
         return public_image_job(job)
     except (ValueError, RuntimeError, OSError) as exc:
         image_result.unlink(missing_ok=True)
         text_result.unlink(missing_ok=True)
+        job.result_image_path = None
+        job.result_text_path = None
+        job.result_format = None
+        job.result_width = None
+        job.result_height = None
+        job.result_size_bytes = None
         job.status = "error"
         job.message = str(exc) or "Не удалось преобразовать изображение."
         raise HTTPException(status_code=422, detail=job.message) from exc
@@ -292,22 +326,32 @@ async def process_image_job(job_id: str, options: ImageAsciiSettings) -> ImageJo
 @app.get("/api/images/{job_id}/result")
 def get_image_result(
     job_id: str,
-    format: Literal["png", "txt"] = "png",
+    format: Literal["png", "jpeg", "webp", "txt"] = "png",
     download: bool = False,
     t: str | None = None,
 ) -> FileResponse:
     del t
     job = get_image_job(job_id)
-    result_path = job.result_image_path if format == "png" else job.result_text_path
+    if format == "txt":
+        result_path = job.result_text_path
+    elif format == job.result_format:
+        result_path = job.result_image_path
+    else:
+        result_path = None
     if not result_path or not result_path.exists():
         raise HTTPException(status_code=404, detail="Результат ещё не создан.")
     response_options = {
         "path": result_path,
-        "media_type": "image/png" if format == "png" else "text/plain; charset=utf-8",
+        "media_type": {
+            "png": "image/png",
+            "jpeg": "image/jpeg",
+            "webp": "image/webp",
+            "txt": "text/plain; charset=utf-8",
+        }[format],
         "headers": {"Cache-Control": "no-store"},
     }
     if download:
-        response_options["filename"] = "ascii-image.png" if format == "png" else "ascii-image.txt"
+        response_options["filename"] = "ascii-image.txt" if format == "txt" else f"ascii-image.{format}"
     return FileResponse(**response_options)
 
 
@@ -454,7 +498,7 @@ def run_conversion(job: Job, options: AsciiSettings) -> None:
 
     try:
         output_path = job.directory / f"ascii-result.{options.output_format}"
-        convert_video(
+        result_width, result_height = convert_video(
             job.input_path,
             output_path,
             job.directory,
@@ -465,6 +509,9 @@ def run_conversion(job: Job, options: AsciiSettings) -> None:
         )
         job.result_path = output_path
         job.result_format = options.output_format
+        job.result_width = result_width
+        job.result_height = result_height
+        job.result_size_bytes = output_path.stat().st_size
         job.status = "completed"
         job.stage = "completed"
         job.progress = 100

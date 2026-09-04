@@ -137,6 +137,29 @@
             </select>
           </div>
 
+          <div class="control-group output-settings">
+            <label for="outputResolution">Разрешение файла</label>
+            <select id="outputResolution">
+              <option value="auto">Авто · по ASCII-сетке</option>
+              <option value="640x360">640×360 · компактное</option>
+              <option value="1280x720">1280×720 · HD</option>
+              <option value="1920x1080">1920×1080 · Full HD</option>
+              <option value="1080x1080">1080×1080 · квадрат</option>
+              <option value="1080x1350">1080×1350 · вертикальное</option>
+              <option value="custom">Своё разрешение</option>
+            </select>
+            <div id="customResolution" class="custom-resolution" hidden>
+              <label><span>Ширина</span><input id="outputWidth" type="number" min="64" max="4096" value="1280" /></label>
+              <b>×</b>
+              <label><span>Высота</span><input id="outputHeight" type="number" min="64" max="4096" value="720" /></label>
+            </div>
+          </div>
+
+          <div class="output-grid">
+            <label><span>Формат файла</span><select id="outputFormat"><option value="webp">WebP · компактный</option><option value="jpeg">JPEG · совместимый</option><option value="png">PNG · без потерь</option></select></label>
+            <label><span>Сжатие</span><select id="compressionQuality"><option value="0.55">Сильное</option><option value="0.78" selected>Баланс</option><option value="0.92">Мягкое</option></select></label>
+          </div>
+
           <label class="switch-row">
             <span><strong>Инверсия</strong><small>Поменять свет и тень местами</small></span>
             <input id="invert" type="checkbox" role="switch" />
