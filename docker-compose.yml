@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+      MAX_DURATION_SECONDS: ${MAX_DURATION_SECONDS:-300}
+      TEMP_ROOT: /tmp
+      FRONTEND_ORIGIN: http://localhost:5173
+    volumes:
+      - ascii_jobs:/tmp/ascii-motion
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+volumes:
+  ascii_jobs:
